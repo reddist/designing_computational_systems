@@ -5,7 +5,7 @@
 #ifndef ENGINEERING_COMPUTATIONAL_SYSTEMS_GPIOUTIL_H
 #define ENGINEERING_COMPUTATIONAL_SYSTEMS_GPIOUTIL_H
 
-#include "stm32f4xx_hal_gpio.h"
+#include "gpio.h"
 
 #define PIN_RED GPIO_PIN_15
 #define PIN_YELLOW GPIO_PIN_14
