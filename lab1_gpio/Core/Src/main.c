@@ -23,7 +23,7 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include "gpioutil.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -66,48 +66,6 @@ void setupPassword (uint16_t* password) {
 	password[7] = 1;
 }
 
-void delay (uint32_t time) {
-	HAL_Delay(time);
-}
-
-void togglePin (uint16_t pin) {
-	switch (pin) {
-			case 15:
-				pin = GPIO_PIN_15;
-				break;
-			case 14:
-				pin = GPIO_PIN_14;
-				break;
-			case 13:
-				pin = GPIO_PIN_13;
-				break;
-			default: return;
-		}
-	HAL_GPIO_TogglePin(GPIOD, pin);
-}
-
-void blink (char type, uint32_t delay_time, uint16_t blinks_amount) {
-	uint16_t pin;
-	switch (type) {
-		case 'r':
-			pin = 15;
-			break;
-		case 'y':
-			pin = 14;
-			break;
-		case 'g':
-			pin = 13;
-			break;
-		default: return;
-	}
-	for (uint16_t i = 0; i < blinks_amount; i++) {
-		togglePin(pin);
-		delay(delay_time);
-		togglePin(pin);
-		delay(delay_time);
-	}
-}
-
 void block (
 	uint16_t* current_position,
 	uint16_t* is_pushed_down,
@@ -117,10 +75,10 @@ void block (
 	*is_pushed_down = 0;
 	(*block_times)++;
 	if (*block_times < 3) {
-		blink('r', 250, 3);
+		blink(PIN_RED, 250, 3);
 	} else {
 		*block_times = 0;
-		blink('r', 350, 10);
+		blink(PIN_RED, 350, 10);
 	}
 }
 
@@ -136,9 +94,9 @@ void checkBtn (
 		if (*current_position == 8) {
 			*current_position = 0;
 			*block_times = 0;
-			blink('g', 350, 10);
+			blink(PIN_GREEN, 350, 10);
 		} else {
-			blink('y', 250, 3);
+			blink(PIN_YELLOW, 250, 3);
 		}
 	} else {
 		block(current_position, is_pushed_down, block_times);
@@ -150,7 +108,7 @@ uint16_t checkTime (
 		uint32_t pull_up_timestamp,
 		uint32_t long_push_time_ms
 ) {
-	return (pull_up_timestamp - push_down_timestamp >= long_push_time_ms)? 1 : 0;
+	return (pull_up_timestamp - push_down_timestamp >= long_push_time_ms) ? 1 : 0;
 }
 
 /* USER CODE END 0 */
@@ -196,7 +154,7 @@ int main(void)
   uint32_t pull_up_timestamp;
   uint32_t short_push_time_ms = 100;
   uint32_t long_push_time_ms = 1000;
-  blink('g', 250, 5);
+  blink(PIN_GREEN, 250, 5);
 
   /* USER CODE END 2 */
 
@@ -204,26 +162,26 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-	  GPIO_PinState btn_input_gpio_state = HAL_GPIO_ReadPin(GPIOC, GPIO_PIN_15);
+	  GPIO_PinState btn_input_gpio_state = HAL_GPIO_ReadPin(GPIOC, PIN_RED);
 	  if (btn_input_gpio_state == GPIO_PIN_SET) {
 		  if (checkTime(pull_up_timestamp, HAL_GetTick(), 5000) == 1) {
 			  block(&current_position, &is_pushed_down, &block_times);
 		  }
 	  }
-	  if (is_pushed_down == 0) {
+	  if (is_pushed_down) {
 		  if (btn_input_gpio_state == GPIO_PIN_RESET) {
 			  push_down_timestamp = HAL_GetTick();
-			  delay(short_push_time_ms); // debounce
-			  btn_input_gpio_state = HAL_GPIO_ReadPin(GPIOC, GPIO_PIN_15); // debounce
+			  wait(short_push_time_ms); // debounce
+			  btn_input_gpio_state = HAL_GPIO_ReadPin(GPIOC, PIN_RED); // debounce
 			  if (btn_input_gpio_state == GPIO_PIN_RESET) {
-				  is_pushed_down = 1;
+				  is_pushed_down = 0;
 			  }
 		  }
 	  } else {
 		  if (btn_input_gpio_state == GPIO_PIN_SET) {
 			  pull_up_timestamp = HAL_GetTick();
 			  btn_input = checkTime(push_down_timestamp, pull_up_timestamp, long_push_time_ms);
-			  is_pushed_down = 0;
+			  is_pushed_down = 1;
 			  checkBtn(btn_input, &current_position, password, &block_times, &is_pushed_down);
 		  }
 	  }
