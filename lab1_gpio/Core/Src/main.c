@@ -140,6 +140,7 @@ int main(void) {
 
     /* Initialize all configured peripherals */
     MX_GPIO_Init();
+
     /* USER CODE BEGIN 2 */
     uint16_t password[8]; // 1 - long, 0 - short
     setupPassword(password);
@@ -162,7 +163,7 @@ int main(void) {
     GPIO_PinState btn_state;
     while (1) {
         btn_state = HAL_GPIO_ReadPin(GPIOC, GPIO_PIN_15);
-        if (btn_state == GPIO_PIN_SET &&
+        if (btn_state == GPIO_PIN_SET && current_position > 0 &&
             checkTime(release_timestamp, HAL_GetTick(), 5000) == 1) {
             block(&current_position, &is_pressed, &block_times);
         }
