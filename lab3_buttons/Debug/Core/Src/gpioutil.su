@@ -1,0 +1,3 @@
+gpioutil.c:7:6:toggle	16	static
+gpioutil.c:11:6:wait	16	static
+gpioutil.c:15:6:blink	24	static

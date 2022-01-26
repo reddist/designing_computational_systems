@@ -1,0 +1,320 @@
+/* USER CODE BEGIN Header */
+/**
+ ******************************************************************************
+ * @file           : main.c
+ * @brief          : Main program body
+ ******************************************************************************
+ * @attention
+ *
+ * <h2><center>&copy; Copyright (c) 2021 STMicroelectronics.
+ * All rights reserved.</center></h2>
+ *
+ * This software component is licensed by ST under BSD 3-Clause license,
+ * the "License"; You may not use this file except in compliance with the
+ * License. You may obtain a copy of the License at:
+ *                        opensource.org/licenses/BSD-3-Clause
+ *
+ ******************************************************************************
+ */
+/* USER CODE END Header */
+/* Includes ------------------------------------------------------------------*/
+#include "main.h"
+#include "usart.h"
+#include "gpio.h"
+
+/* Private includes ----------------------------------------------------------*/
+/* USER CODE BEGIN Includes */
+#include "gpioutil.h"
+
+/* USER CODE END Includes */
+
+/* Private typedef -----------------------------------------------------------*/
+/* USER CODE BEGIN PTD */
+
+/* USER CODE END PTD */
+
+/* Private define ------------------------------------------------------------*/
+/* USER CODE BEGIN PD */
+/* USER CODE END PD */
+
+/* Private macro -------------------------------------------------------------*/
+/* USER CODE BEGIN PM */
+
+/* USER CODE END PM */
+
+/* Private variables ---------------------------------------------------------*/
+
+/* USER CODE BEGIN PV */
+
+uint8_t is_IRQ_Enabled = 0;
+uint8_t *IRQ_Enabled_Message = "IRQ Enabled.\n\r";
+uint8_t *IRQ_Disabled_Message = "IRQ Disabled.\n\r";
+uint8_t *caret = "\n\r";
+uint16_t IRQ_Enabled_Message_Size = 14;
+uint16_t IRQ_Disabled_Message_Size = 15;
+uint8_t is_Opened = 0;
+uint32_t last_Open_Time;
+uint8_t current_Position = 0;
+uint8_t password[8];
+uint8_t password_Size;
+uint8_t block_Times = 0;
+
+/* USER CODE END PV */
+
+/* Private function prototypes -----------------------------------------------*/
+void SystemClock_Config(void);
+/* USER CODE BEGIN PFP */
+
+/* USER CODE END PFP */
+
+/* Private user code ---------------------------------------------------------*/
+/* USER CODE BEGIN 0 */
+
+void huart_Transmit(uint8_t *pData, uint16_t Size) {
+	HAL_UART_Transmit(&huart6, pData, Size, 20);
+}
+
+uint8_t huart_Recieve() {
+	uint8_t received_char;
+	if (HAL_UART_Receive(&huart6, &received_char, 1, 20) == HAL_OK) {
+		return received_char;
+	}
+	return 0;
+}
+
+void transmit_caret() {
+	huart_Transmit(caret, 2);
+}
+
+void setupPassword(uint8_t *new_Password, uint8_t new_Password_Size) {
+	for (uint8_t i = 0; i < new_Password_Size; i++) {
+		password[i] = new_Password[i];
+	}
+	password_Size = new_Password_Size;
+}
+
+void open() {
+	is_Opened = 1;
+	block_Times = 0;
+	current_Position = 0;
+	last_Open_Time = HAL_GetTick();
+	toggle(PIN_GREEN);
+}
+
+void block_With_Warning() {
+	block_Times++;
+	current_Position = 0;
+	if (block_Times < 3) {
+		blink(PIN_YELLOW, 250, 3);
+	} else {
+		blink(PIN_RED, 100, 10);
+	}
+}
+
+void block() {
+	if (is_Opened == 1) {
+		is_Opened = 0;
+		toggle(PIN_GREEN);
+	}
+}
+
+/* USER CODE END 0 */
+
+/**
+ * @brief  The application entry point.
+ * @retval int
+ */
+int main(void) {
+	/* USER CODE BEGIN 1 */
+
+	/* USER CODE END 1 */
+
+	/* MCU Configuration--------------------------------------------------------*/
+
+	/* Reset of all peripherals, Initializes the Flash interface and the Systick. */
+	HAL_Init();
+
+	/* USER CODE BEGIN Init */
+
+	/* USER CODE END Init */
+
+	/* Configure the system clock */
+	SystemClock_Config();
+
+	/* USER CODE BEGIN SysInit */
+
+	/* USER CODE END SysInit */
+
+	/* Initialize all configured peripherals */
+	MX_GPIO_Init();
+	MX_USART6_UART_Init();
+	/* USER CODE BEGIN 2 */
+
+	uint32_t short_press_time_ms = 100;
+	GPIO_PinState btn_state;
+
+	HAL_NVIC_DisableIRQ(USART6_IRQn);
+	setupPassword("1234", 4);
+
+	/* USER CODE END 2 */
+
+	/* Infinite loop */
+	/* USER CODE BEGIN WHILE */
+	while (1) {
+		/* USER CODE END WHILE */
+
+		/* USER CODE BEGIN 3 */
+
+		btn_state = HAL_GPIO_ReadPin(GPIOC, GPIO_PIN_15);
+		if (btn_state == GPIO_PIN_RESET) {
+			wait(short_press_time_ms); // debounce
+			btn_state = HAL_GPIO_ReadPin(GPIOC, GPIO_PIN_15);
+			if (btn_state == GPIO_PIN_RESET) {
+				if (is_IRQ_Enabled == 1) {
+					// disable irq
+					is_IRQ_Enabled = 0;
+					HAL_NVIC_DisableIRQ(USART6_IRQn);
+					huart_Transmit(IRQ_Disabled_Message,
+							IRQ_Disabled_Message_Size);
+				} else {
+					// enable irq
+					is_IRQ_Enabled = 1;
+					HAL_NVIC_EnableIRQ(USART6_IRQn);
+					huart_Transmit(IRQ_Enabled_Message,
+							IRQ_Enabled_Message_Size);
+				}
+			}
+		}
+
+		if (is_IRQ_Enabled == 1) {
+			// work with irq
+		} else {
+			if (is_Opened == 1) {
+				if (HAL_GetTick() - last_Open_Time < 5000) {
+					uint8_t plus = huart_Recieve();
+					if (plus == '+') {
+						transmit_caret();
+						huart_Transmit("Type new password (max 8 letters): ",
+								35);
+						uint8_t i = 0;
+						uint8_t new_password[8];
+						while (i < 8) {
+							uint8_t password_letter = huart_Recieve();
+							if (password_letter != 0) {
+								if (password_letter == '\r') {
+									transmit_caret();
+									break;
+								}
+								huart_Transmit(&password_letter, 1);
+								new_password[i] = password_letter;
+								i++;
+							}
+						}
+						transmit_caret();
+						huart_Transmit("Your new password: ", 19);
+						huart_Transmit(new_password, i);
+						transmit_caret();
+						setupPassword(new_password, i);
+						block();
+					}
+				} else {
+					block();
+				}
+			} else {
+				uint8_t password_letter = huart_Recieve();
+				if (password_letter != 0) {
+					if (password_letter == password[current_Position]) {
+						huart_Transmit(&password_letter, 1);
+						current_Position++;
+						if (current_Position == password_Size) {
+							transmit_caret();
+							huart_Transmit(
+									"Opened! Type '+' to change password: ",
+									37);
+							transmit_caret();
+							open();
+						}
+					} else {
+						transmit_caret();
+						huart_Transmit("Incorrect.", 10);
+						transmit_caret();
+						block_With_Warning();
+					}
+				}
+			}
+		}
+	}
+	/* USER CODE END 3 */
+}
+
+/**
+ * @brief System Clock Configuration
+ * @retval None
+ */
+void SystemClock_Config(void) {
+	RCC_OscInitTypeDef RCC_OscInitStruct = { 0 };
+	RCC_ClkInitTypeDef RCC_ClkInitStruct = { 0 };
+
+	/** Configure the main internal regulator output voltage
+	 */
+	__HAL_RCC_PWR_CLK_ENABLE();
+	__HAL_PWR_VOLTAGESCALING_CONFIG(PWR_REGULATOR_VOLTAGE_SCALE3);
+	/** Initializes the RCC Oscillators according to the specified parameters
+	 * in the RCC_OscInitTypeDef structure.
+	 */
+	RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI;
+	RCC_OscInitStruct.HSIState = RCC_HSI_ON;
+	RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_DEFAULT;
+	RCC_OscInitStruct.PLL.PLLState = RCC_PLL_NONE;
+	if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK) {
+		Error_Handler();
+	}
+	/** Initializes the CPU, AHB and APB buses clocks
+	 */
+	RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK | RCC_CLOCKTYPE_SYSCLK
+			| RCC_CLOCKTYPE_PCLK1 | RCC_CLOCKTYPE_PCLK2;
+	RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_HSI;
+	RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
+	RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV1;
+	RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV1;
+
+	if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_0) != HAL_OK) {
+		Error_Handler();
+	}
+}
+
+/* USER CODE BEGIN 4 */
+
+/* USER CODE END 4 */
+
+/**
+ * @brief  This function is executed in case of error occurrence.
+ * @retval None
+ */
+void Error_Handler(void) {
+	/* USER CODE BEGIN Error_Handler_Debug */
+	/* User can add his own implementation to report the HAL error return state */
+	__disable_irq();
+	while (1) {
+	}
+	/* USER CODE END Error_Handler_Debug */
+}
+
+#ifdef  USE_FULL_ASSERT
+/**
+  * @brief  Reports the name of the source file and the source line number
+  *         where the assert_param error has occurred.
+  * @param  file: pointer to the source file name
+  * @param  line: assert_param error line source number
+  * @retval None
+  */
+void assert_failed(uint8_t *file, uint32_t line)
+{
+  /* USER CODE BEGIN 6 */
+  /* User can add his own implementation to report the file name and line number,
+     ex: printf("Wrong parameters value: file %s on line %d\r\n", file, line) */
+  /* USER CODE END 6 */
+}
+#endif /* USE_FULL_ASSERT */
+
+/************************ (C) COPYRIGHT STMicroelectronics *****END OF FILE****/
